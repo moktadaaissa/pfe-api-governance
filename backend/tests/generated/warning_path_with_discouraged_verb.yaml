@@ -1,0 +1,23 @@
+openapi: 3.0.0
+info:
+  title: Users API
+  version: 1.0.0
+paths:
+  /create:
+    post:
+      summary: Create user
+      description: Create a new user in the system
+      operationId: createUser
+      tags:
+      - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Bad request

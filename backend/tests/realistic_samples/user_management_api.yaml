@@ -1,0 +1,267 @@
+openapi: 3.0.0
+info:
+  title: User Management API
+  version: 1.2.0
+  description: API for managing users, profiles, and account status within the platform.
+
+servers:
+  - url: http://localhost:8000
+
+tags:
+  - name: Users
+    description: Operations related to users
+  - name: Profiles
+    description: Operations related to user profiles
+  - name: Admin
+    description: Administrative operations
+
+paths:
+  /users:
+    get:
+      summary: List users
+      description: Retrieve a paginated list of users with optional filtering by status and role.
+      operationId: listUsers
+      tags:
+        - Users
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, inactive, suspended]
+      responses:
+        "200":
+          description: Users retrieved successfully
+        "400":
+          description: Invalid query parameters
+        "500":
+          description: Internal server error
+
+    post:
+      summary: Create user
+      description: Create a new user account in the platform.
+      operationId: createUser
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created successfully
+        "400":
+          description: Invalid request body
+        "409":
+          description: User already exists
+
+  /users/{userId}:
+    get:
+      summary: Get user by ID
+      description: Retrieve detailed information about a specific user.
+      operationId: getUserById
+      tags:
+        - Users
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User retrieved successfully
+        "404":
+          description: User not found
+
+    put:
+      summary: Update user
+      description: Update the core information of an existing user.
+      operationId: updateUser
+      tags:
+        - Users
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: User updated successfully
+        "400":
+          description: Invalid request body
+        "404":
+          description: User not found
+
+    delete:
+      summary: Delete user
+      description: Delete a user account from the platform.
+      operationId: deleteUser
+      tags:
+        - Admin
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User deleted successfully
+        "404":
+          description: User not found
+
+  /users/{userId}/profile:
+    get:
+      summary: Get user profile
+      description: Retrieve the profile information of a specific user.
+      operationId: getUserProfile
+      tags:
+        - Profiles
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Profile retrieved successfully
+        "404":
+          description: Profile not found
+
+    patch:
+      summary: Update user profile
+      description: Update selected profile fields for a specific user.
+      operationId: updateUserProfile
+      tags:
+        - Profiles
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Profile updated successfully
+        "400":
+          description: Invalid request body
+        "404":
+          description: Profile not found
+
+  /users/{userId}/activate:
+    post:
+      summary: Activate user
+      description: Activate a suspended or inactive user account.
+      operationId: activateUser
+      tags:
+        - Admin
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User activated successfully
+        "404":
+          description: User not found
+        "409":
+          description: User is already active
+
+  /users/{userId}/deactivate:
+    post:
+      summary: Deactivate user
+      description: Deactivate an active user account.
+      operationId: deactivateUser
+      tags:
+        - Admin
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User deactivated successfully
+        "404":
+          description: User not found
+        "409":
+          description: User is already inactive
+
+components:
+  schemas:
+    CreateUserRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+        - role
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, manager, agent, viewer]
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, agent, viewer]
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+        address:
+          type: string
+        jobTitle:
+          type: string

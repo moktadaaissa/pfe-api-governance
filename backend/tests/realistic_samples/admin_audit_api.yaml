@@ -1,0 +1,48 @@
+openapi: 3.0.0
+info:
+  title: Admin Audit API
+  version: 1.0.0
+  description: API for auditing system activity and logs.
+
+paths:
+  /audit/logs:
+    get:
+      summary: Get logs
+      description: Retrieve system logs with filters.
+      operationId: getLogs
+      tags:
+        - Audit
+      parameters:
+        - name: fromDate
+          in: query
+          schema:
+            type: string
+        - name: toDate
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Logs retrieved
+
+  /audit/logs/export:
+    post:
+      summary: Export logs
+      description: Export logs.
+      operationId: exportLogs
+      tags:
+        - Audit
+      responses:
+        "200":
+          description: Export successful
+
+  /audit/deleteLogs:
+    delete:
+      summary: Delete logs
+      description: Delete logs permanently.
+      operationId: deleteLogs
+      tags:
+        - Admin
+      responses:
+        "204":
+          description: Logs deleted

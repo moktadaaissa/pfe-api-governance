@@ -1,0 +1,54 @@
+openapi: 3.0.0
+info:
+  title: Notification Service API
+  version: 1.0.0
+  description: API for sending and managing notifications.
+
+paths:
+  /notifications:
+    post:
+      summary: Send notification
+      description: Send a notification to a user.
+      operationId: sendNotification
+      tags:
+        - Notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                message:
+                  type: string
+      responses:
+        "200":
+          description: Notification sent
+
+  /notifications/{id}:
+    get:
+      summary: Get notification
+      description: ok
+      operationId: getNotification
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notification retrieved
+
+  /notifications_bulk:
+    post:
+      summary: Send bulk notifications
+      description: Send multiple notifications at once.
+      operationId: sendBulkNotifications
+      tags:
+        - Notifications
+      responses:
+        "200":
+          description: Bulk notifications sent

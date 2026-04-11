@@ -1,0 +1,29 @@
+openapi: 3.0.0
+info:
+  title: Users API
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      summary: Get users
+      description: Retrieve all users from the system
+      operationId: getUsers
+      tags:
+      - Users
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          description: Bad request
+  /trace-test:
+    trace:
+      summary: Trace request
+      description: Trace request details for debugging
+      operationId: traceRequest
+      tags:
+      - Trace
+      responses:
+        '200':
+          description: Trace successful
+        '500':
+          description: Server error

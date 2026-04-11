@@ -1,0 +1,23 @@
+openapi: 3.0.0
+info:
+  title: Users API
+  version: 1.0.0
+paths:
+  /users/{id}/delete:
+    post:
+      summary: Delete user
+      description: Delete a user from the system
+      operationId: deleteUser
+      tags:
+      - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Deleted
+        '400':
+          description: Bad request

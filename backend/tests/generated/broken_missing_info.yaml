@@ -1,0 +1,14 @@
+openapi: 3.0.0
+paths:
+  /users:
+    get:
+      summary: Get users
+      description: Retrieve all users from the system
+      operationId: getUsers
+      tags:
+      - Users
+      responses:
+        '200':
+          description: Successful response
+        '400':
+          description: Bad request

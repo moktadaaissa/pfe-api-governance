@@ -1,0 +1,8 @@
+openapi: ''
+info:
+  title: ''
+  version: ''
+paths:
+  users:
+    fetch:
+      responses: bad

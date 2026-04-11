@@ -1,0 +1,95 @@
+openapi: 3.0.0
+info:
+  title: Loan Application API
+  version: 1.0.0
+  description: API for managing loan applications, approvals, and status tracking.
+
+paths:
+  /loans:
+    post:
+      summary: Create loan application
+      description: Submit a new loan application.
+      operationId: createLoanApplication
+      tags:
+        - Loans
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                duration:
+                  type: integer
+                applicantId:
+                  type: string
+      responses:
+        "201":
+          description: Loan created
+        "400":
+          description: Invalid request
+
+    get:
+      summary: List loans
+      description: Retrieve all loan applications.
+      operationId: listLoans
+      tags:
+        - Loans
+      responses:
+        "200":
+          description: Loans retrieved
+
+  /loans/{loanId}:
+    get:
+      summary: Get loan
+      description: Retrieve loan details.
+      operationId: getLoan
+      tags:
+        - Loans
+      parameters:
+        - name: loanId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Loan found
+        "404":
+          description: Loan not found
+
+  /loans/{loanId}/approve:
+    post:
+      summary: Approve loan
+      description: Approve a loan application.
+      operationId: approveLoan
+      tags:
+        - Admin
+      parameters:
+        - name: loanId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Loan approved
+
+  /loans/{loanId}/reject:
+    post:
+      summary: Reject loan
+      description: Reject a loan.
+      operationId: rejectLoan
+      tags:
+        - Admin
+      parameters:
+        - name: loanId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Loan rejected
