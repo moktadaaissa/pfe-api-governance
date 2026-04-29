@@ -1,0 +1,15 @@
+openapi: 3.0.3
+info:
+  title: Response Only
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      summary: List users
+      description: Returns all users.
+      operationId: listUsers
+      tags:
+      - Users
+      responses:
+        '200': {}
+        '400': {}

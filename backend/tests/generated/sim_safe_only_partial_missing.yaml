@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: Partial Safe
+  version: 1.0.0
+paths:
+  /users:
+    get:
+      summary: List users
+      responses:
+        '200':
+          description: OK
+        '400': {}

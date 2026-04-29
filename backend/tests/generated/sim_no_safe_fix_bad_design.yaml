@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: No Safe Fix
+  version: 1.0.0
+paths:
+  /orders/delete:
+    delete:
+      summary: Delete order
+      description: Deletes order
+      operationId: deleteOrder
+      tags:
+      - Orders
+      responses:
+        '200':
+          description: Deleted
+        '404':
+          description: Not found

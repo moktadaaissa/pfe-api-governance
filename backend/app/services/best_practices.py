@@ -3,7 +3,7 @@ def validate_best_practices(data: dict):
 
     valid_methods = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
     valid_path_level_fields = {"parameters", "summary", "description", "servers"}
-    discouraged_verbs = {"get", "create", "update", "delete", "set", "add", "remove"}
+    discouraged_verbs = {"get", "create", "update", "delete", "set", "add", "remove", "approve", "reject", "block", "close", "activate", "deactivate"}
 
     # Action-style POST endpoints (no requestBody required)
     action_post_segments = {
