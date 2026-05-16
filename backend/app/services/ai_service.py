@@ -1,8 +1,11 @@
+import logging
 import os
 import json
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
@@ -27,7 +30,10 @@ def _clean_json_response(content: str):
         content = content[:-3]
 
     content = content.strip()
-    return json.loads(content)
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"AI returned invalid JSON: {exc}") from exc
 
 
 def ai_review_openapi(data: dict):
@@ -133,6 +139,7 @@ Endpoints:
         return _clean_json_response(content)
 
     except Exception as e:
+        logger.error("ai_review_openapi failed: %s", e, exc_info=True)
         return {"error": str(e)}
 
 
@@ -262,9 +269,80 @@ Endpoints:
         parsed = _clean_json_response(content)
 
         if not isinstance(parsed, list):
+            logger.warning("ai_generate_safe_fixes: expected list, got %s", type(parsed).__name__)
             return {"error": "AI did not return a list of fixes"}
 
         return parsed
 
     except Exception as e:
+        logger.error("ai_generate_safe_fixes failed: %s", e, exc_info=True)
         return {"error": str(e)}
+    
+def ai_review_duplicate_match(uploaded_endpoint: dict, matched_endpoint: dict, matched_api: dict, similarity: float):
+    """
+    AI-assisted duplicate explanation.
+    Used only after deterministic cosine similarity finds a suspicious match.
+    """
+    try:
+        prompt = f"""
+You are an API governance expert.
+
+Your task is to review whether two API endpoints are functionally duplicate, overlapping, or different.
+
+Return ONLY valid JSON. No markdown.
+
+Use this format:
+{{
+  "ai_duplicate_decision": "duplicate" | "overlap" | "different",
+  "confidence": 0-100,
+  "reason": "short professional explanation",
+  "recommendation": "what governance reviewer should do"
+}}
+
+Uploaded endpoint:
+{json.dumps(uploaded_endpoint, ensure_ascii=False, indent=2)}
+
+Matched existing endpoint:
+{json.dumps(matched_endpoint, ensure_ascii=False, indent=2)}
+
+Matched API:
+{json.dumps(matched_api, ensure_ascii=False, indent=2)}
+
+Deterministic cosine similarity:
+{similarity}
+"""
+
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": "You are an expert API governance reviewer."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.1,
+            extra_headers={
+                "HTTP-Referer": "http://localhost:8000",
+                "X-OpenRouter-Title": "PFE API Governance",
+            },
+        )
+
+        content = response.choices[0].message.content or ""
+        parsed = _clean_json_response(content)
+
+        if not isinstance(parsed, dict):
+            return {
+                "ai_duplicate_decision": "unknown",
+                "confidence": 0,
+                "reason": "AI response format was invalid.",
+                "recommendation": "Review manually."
+            }
+
+        return parsed
+
+    except Exception as e:
+        logger.error("ai_review_duplicate_match failed: %s", e, exc_info=True)
+        return {
+            "ai_duplicate_decision": "unavailable",
+            "confidence": 0,
+            "reason": f"AI duplicate review unavailable: {str(e)}",
+            "recommendation": "Use deterministic similarity result and review manually if needed."
+        }

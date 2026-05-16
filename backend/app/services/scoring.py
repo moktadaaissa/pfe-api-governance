@@ -30,8 +30,7 @@ def compute_apri(data: dict, structure_issues: list, best_practice_issues: list)
     valid_path_level_fields = {"parameters", "summary", "description", "servers"}
 
     discouraged_verbs = {
-        "get", "create", "update", "delete", "set", "add", "remove",
-        "approve", "reject", "block", "close", "activate", "deactivate"
+        "get", "create", "update", "delete", "set", "add", "remove"
     }
 
     action_post_segments = {
@@ -78,14 +77,29 @@ def compute_apri(data: dict, structure_issues: list, best_practice_issues: list)
             if part and not part.startswith("{")
         ]
 
+        last_segment = path.strip("/").split("/")[-1].lower() \
+                       if path.strip("/") else ""
+        last_segment_is_action = last_segment in action_post_segments
+
         has_discouraged_verb = False
         has_underscore = False
 
         for part in path_parts:
             clean_part = part.lower()
 
+            # Skip last segment if it is a known action endpoint
+            if clean_part == last_segment and last_segment_is_action:
+                continue
+
             for verb in discouraged_verbs:
-                if clean_part == verb or clean_part.startswith(verb):
+                # Only flag camelCase verb prefixes (e.g. getUsers, createAccount)
+                # not resource names that happen to start with a verb (e.g. /sets, /blocks)
+                if clean_part == verb:
+                    has_discouraged_verb = True
+                    break
+                if (clean_part.startswith(verb) and
+                        len(clean_part) > len(verb) and
+                        clean_part[len(verb)].isupper()):
                     has_discouraged_verb = True
                     break
 
@@ -309,8 +323,12 @@ def compute_apri(data: dict, structure_issues: list, best_practice_issues: list)
     else:
         grade = "Poor"
 
-    # Publishability depends on governance, not score alone
-    publishable = major_issues == 0 and len(structure_issues) == 0
+    # Publishable = no structure errors + no major issues + score at least Acceptable (≥70)
+    publishable = (
+        len(structure_issues) == 0
+        and major_issues == 0
+        and apri_score >= 70
+    )
 
     return {
         "apri_score": apri_score,

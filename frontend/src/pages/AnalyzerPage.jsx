@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:8000";
 
 const ISSUE_GROUPS = {
   documentation: {
@@ -187,18 +187,18 @@ function IntroExperience({ user }) {
     <>
       <section className="landing-hero scroll-reveal">
         <div className="landing-copy">
-          <p className="eyebrow">AI-Driven API Governance Workbench</p>
+          <p className="eyebrow">API Governance Gateway for WSO2 API Manager</p>
           <h1>Validate OpenAPI quality before publication.</h1>
           <p>
-            Analyze API specifications before they enter the lifecycle using structural
+            Analyze API specifications before they enter the WSO2 lifecycle using structural
             validation, best-practice checks, APRI scoring, AI-assisted review, duplicate
-            detection, prototype readiness simulation, and controlled publication.
+            detection, and controlled publication directly to WSO2 API Manager.
           </p>
 
           <div className="meta-line">
             <span>{user?.role === "admin" ? "Admin access" : "Developer access"}</span>
             <span>OpenAPI YAML / JSON</span>
-            <span>Pre-publication governance</span>
+            <span>WSO2 API Manager 4.3.0</span>
           </div>
         </div>
 
@@ -210,7 +210,9 @@ function IntroExperience({ user }) {
           <div className="visual-card top-left">Validation</div>
           <div className="visual-card top-right">AI Review</div>
           <div className="visual-card bottom-left">Governance Gate</div>
-          <div className="visual-card bottom-right">Catalog</div>
+          <div className="visual-card bottom-right" style={{ color: "var(--wso2)", borderColor: "var(--wso2-border)", background: "var(--wso2-bg)" }}>
+            WSO2 AM
+          </div>
         </div>
       </section>
 
@@ -271,7 +273,7 @@ function IntroExperience({ user }) {
           </div>
           <div className="decision-line danger">
             <strong>BLOCK</strong>
-            <span>The API has structural blockers or exact duplicate conflicts.</span>
+            <span>The API has structural blockers.</span>
           </div>
         </div>
       </section>
@@ -284,6 +286,23 @@ function ExecutiveSummary({ result, duplicateInfo, governanceDecisionText }) {
 
   return (
     <>
+      <section className="apri-hero-section scroll-reveal" style={{ textAlign: "center", padding: "48px 24px 32px" }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 20, flexWrap: "wrap" }}>
+          <strong className={scoreTone} style={{ fontSize: 88, fontWeight: 800, lineHeight: 1, letterSpacing: "-2px" }}>
+            {Number(result.apri_score || 0).toFixed(2)}
+          </strong>
+          <strong className={scoreTone} style={{ fontSize: 44, fontWeight: 700 }}>
+            {result.grade}
+          </strong>
+        </div>
+        <div style={{ marginTop: 20 }}>
+          <span className={`status-chip ${getStatusTone(result.governance_decision)}`}>
+            <span>Decision</span>
+            <strong>{result.governance_decision}</strong>
+          </span>
+        </div>
+      </section>
+
       <section className="executive-section scroll-reveal">
         <div className="executive-main">
           <p className="eyebrow">Executive View</p>
@@ -486,7 +505,7 @@ function QualityBreakdown({ categoryScores, bestPracticeIssues, structureIssues 
   );
 }
 
-function IssueActionCenter({ structureIssues, bestPracticeIssues, duplicateInfo }) {
+function IssueActionCenter({ structureIssues, bestPracticeIssues, duplicateInfo, aiReview = [] }) {
   const blockers = [];
   const improvements = [];
 
@@ -507,23 +526,27 @@ function IssueActionCenter({ structureIssues, bestPracticeIssues, duplicateInfo 
 
     const target = isMajor ? blockers : improvements;
 
+    const aiMatch = aiReview.find(
+      (r) => r.endpoint && issue.message.toLowerCase().includes(r.endpoint.toLowerCase())
+    );
+    const aiHint = aiMatch ? (aiMatch.suggestion?.trim() || aiMatch.comment?.trim() || "") : "";
+
     target.push({
       title: labelizeKey(issue.rule_id || "best_practice"),
       message: issue.message,
       tone: isMajor ? "danger" : "warning",
+      aiHint,
     });
   }
 
-  if (duplicateInfo?.status === "blocked") {
-    blockers.push({
-      title: "Exact duplicate detected",
-      message: "This API matches an existing catalog entry and is blocked from publication.",
-      tone: "danger",
-    });
-  } else if (duplicateInfo?.status === "warning") {
+  if (duplicateInfo?.status === "warning") {
+    const exactCount = duplicateInfo?.exact_duplicate_count || 0;
     improvements.push({
-      title: "Potential overlap detected",
-      message: "This API is similar to an existing catalog entry and needs review.",
+      title: exactCount > 0
+        ? `Exact duplicate detected (${exactCount})`
+        : "Potential overlap detected",
+      message: duplicateInfo?.note ||
+        "Similar endpoints exist in the catalog. Review the Duplicate Detection section before publishing.",
       tone: "warning",
     });
   }
@@ -536,13 +559,18 @@ function IssueActionCenter({ structureIssues, bestPracticeIssues, duplicateInfo 
     >
       <div className="section-grid">
         <div>
-          <h3>Blocking Issues</h3>
+          <h3>Major Issues</h3>
           <div className="issue-list">
             {blockers.length > 0 ? (
               blockers.map((item, index) => (
                 <div className={`issue-row ${item.tone}`} key={`blocker-${index}`}>
                   <strong>{item.title}</strong>
                   <span>{item.message}</span>
+                  {item.aiHint ? (
+                    <span style={{ color: "var(--muted)", fontSize: 13, fontStyle: "italic" }}>
+                      AI Suggestion: {item.aiHint}
+                    </span>
+                  ) : null}
                 </div>
               ))
             ) : (
@@ -559,6 +587,11 @@ function IssueActionCenter({ structureIssues, bestPracticeIssues, duplicateInfo 
                 <div className={`issue-row ${item.tone}`} key={`improvement-${index}`}>
                   <strong>{item.title}</strong>
                   <span>{item.message}</span>
+                  {item.aiHint ? (
+                    <span style={{ color: "var(--muted)", fontSize: 13, fontStyle: "italic" }}>
+                      AI Suggestion: {item.aiHint}
+                    </span>
+                  ) : null}
                 </div>
               ))
             ) : (
@@ -571,7 +604,10 @@ function IssueActionCenter({ structureIssues, bestPracticeIssues, duplicateInfo 
   );
 }
 
-function AutoImprovementPreview({ simulation, currentScore }) {
+function AutoImprovementPreview({ simulation, currentScore, file, token }) {
+  const [downloadLoading, setDownloadLoading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+
   if (!simulation) return null;
 
   const simulatedScore = simulation.simulated_score ?? currentScore ?? 0;
@@ -579,6 +615,39 @@ function AutoImprovementPreview({ simulation, currentScore }) {
   const appliedChanges = Array.isArray(simulation.applied_changes)
     ? simulation.applied_changes
     : [];
+
+  const handleDownload = async () => {
+    if (!file) return;
+    setDownloadLoading(true);
+    setDownloadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`${API_BASE}/download-fixed`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || "Download failed.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const stem = file.name.replace(/\.[^.]+$/, "");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${stem}_fixed.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setDownloadError(err.message || "Download failed.");
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
+  const showDownload = simulation.enabled === true && appliedChanges.length > 0;
 
   return (
     <SectionBlock
@@ -622,6 +691,18 @@ function AutoImprovementPreview({ simulation, currentScore }) {
           <div className="empty-line">No safe changes were applied in simulation.</div>
         )}
       </div>
+
+      {showDownload ? (
+        <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 20, display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+          <button className="secondary-btn" onClick={handleDownload} disabled={downloadLoading}>
+            {downloadLoading ? "Generating…" : "Download Fixed Spec"}
+          </button>
+          <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+            This file reflects only safe documentation fixes. Its APRI score should match the simulated score above.
+          </p>
+          {downloadError ? <div className="error-banner">{downloadError}</div> : null}
+        </div>
+      ) : null}
     </SectionBlock>
   );
 }
@@ -693,7 +774,7 @@ function PrototypePipelineSimulation({ prototype }) {
   );
 }
 
-function ManualActionsRequired({ reviews, simulation }) {
+function ManualActionsRequired({ reviews, simulation, appliedChanges = [], bestPracticeIssues = [] }) {
   const excluded = Array.isArray(simulation?.excluded_review_types)
     ? simulation.excluded_review_types
     : [];
@@ -702,30 +783,23 @@ function ManualActionsRequired({ reviews, simulation }) {
     ? simulation.remaining_issues
     : [];
 
-  const manualDesignItems = [];
+  const coveredEndpoints = new Set(
+    Array.isArray(appliedChanges)
+      ? appliedChanges.map((c) => `${String(c.method).toUpperCase()} ${c.path}`)
+      : []
+  );
 
-  if (Array.isArray(reviews)) {
-    for (const item of reviews) {
-      const issues = Array.isArray(item?.issues) ? item.issues : [];
-      const issueText = issues.join(" ").toLowerCase();
-
-      const isDesignLevel =
-        issueText.includes("verb") ||
-        issueText.includes("rest") ||
-        issueText.includes("method") ||
-        issueText.includes("naming") ||
-        issueText.includes("endpoint") ||
-        issueText.includes("action");
-
-      if (isDesignLevel) manualDesignItems.push(item);
-    }
-  }
+  const manualDesignItems = Array.isArray(reviews)
+    ? reviews.filter(
+        (item) => item.status === "needs_improvement" && !coveredEndpoints.has(item.endpoint)
+      )
+    : [];
 
   return (
     <SectionBlock
       title="Manual Actions Required"
       subtitle="Higher-level design decisions that should be reviewed manually."
-      meta={[`${manualDesignItems.length} design items`, `${remaining.length} remaining issues`]}
+      meta={[`${manualDesignItems.length} uncovered`, `${remaining.length} remaining issues`]}
     >
       {excluded.length > 0 ? (
         <div className="meta-line standalone">
@@ -737,17 +811,26 @@ function ManualActionsRequired({ reviews, simulation }) {
 
       <div className="section-grid">
         <div>
-          <h3>Design-Level Review</h3>
+          <h3>AI Flagged — Not Auto-Fixed</h3>
           <div className="issue-list">
             {manualDesignItems.length > 0 ? (
               manualDesignItems.map((item, index) => (
                 <div className="issue-row warning" key={`${item.endpoint}-${index}`}>
                   <strong>{item.endpoint || "Unknown endpoint"}</strong>
-                  <span>{item.suggestion || item.comment || "Manual review required."}</span>
+                  {Array.isArray(item.issues) && item.issues.length > 0 ? (
+                    <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: 13 }}>
+                      {item.issues.map((iss, i) => <li key={i}>{iss}</li>)}
+                    </ul>
+                  ) : null}
+                  {(item.suggestion?.trim() || item.comment?.trim()) ? (
+                    <span style={{ color: "var(--muted)", fontSize: 13, fontStyle: "italic" }}>
+                      Suggestion: {item.suggestion?.trim() || item.comment?.trim()}
+                    </span>
+                  ) : null}
                 </div>
               ))
             ) : (
-              <div className="empty-line">No design-level manual review items were extracted.</div>
+              <div className="empty-line">No uncovered AI findings — the simulation handled all flagged endpoints.</div>
             )}
           </div>
         </div>
@@ -781,75 +864,197 @@ function ManualActionsRequired({ reviews, simulation }) {
 function DuplicateSection({ duplicates }) {
   if (!duplicates) return null;
 
+  const matches = Array.isArray(duplicates.matches) ? duplicates.matches : [];
+  const exactCount = duplicates.exact_duplicate_count || 0;
+  const isClean = duplicates.status === "clean";
+
+  function matchTypeTone(type) {
+    if (type === "exact_duplicate") return "danger";
+    if (type === "strong_overlap") return "warning";
+    return "warning";
+  }
+
+  function matchTypeLabel(type) {
+    if (type === "exact_duplicate") return "Exact duplicate";
+    if (type === "strong_overlap") return "Strong overlap";
+    return "Potential overlap";
+  }
+
+  function aiDecisionLabel(decision) {
+    if (!decision || decision === "unavailable" || decision === "unknown") return null;
+    return decision.charAt(0).toUpperCase() + decision.slice(1);
+  }
+
   return (
     <SectionBlock
       title="Duplicate Detection"
-      subtitle="Similarity checks against APIs already saved in the governance catalog."
+      subtitle="Multi-signal similarity checks against APIs already saved in the governance catalog."
       meta={[duplicates.status || "clean", `${duplicates.count || 0} matches`]}
     >
+      {/* Summary row */}
       <div className="duplicate-clean">
         <div>
           <span>Duplicate Status</span>
-          <strong>{duplicates.status || "clean"}</strong>
+          <strong className={isClean ? "success" : "warning"}>
+            {duplicates.status || "clean"}
+          </strong>
           <p>
-            {duplicates.count || 0} potential match{duplicates.count === 1 ? "" : "es"} found.
+            {duplicates.count || 0} match{duplicates.count === 1 ? "" : "es"} found
+            {exactCount > 0 ? ` (${exactCount} exact)` : ""}.
           </p>
         </div>
-
-        <div className="issue-list">
-          {Array.isArray(duplicates.matches) && duplicates.matches.length > 0 ? (
-            duplicates.matches.map((match, index) => (
-              <div className="issue-row warning" key={`${match.type}-${index}`}>
-                <strong>
-                  {match.uploaded_endpoint?.method} {match.uploaded_endpoint?.path}
-                </strong>
-                <span>
-                  Similarity: {match.similarity}% · Matched API:{" "}
-                  {match.matched_api?.title || match.matched_api?.filename || "Unknown"}
-                </span>
-              </div>
-            ))
+        <div>
+          {isClean ? (
+            <div className="info-banner">
+              No duplicate or overlapping endpoints were detected in the catalog.
+            </div>
           ) : (
-            <div className="empty-line">No duplicate matches detected.</div>
+            <div className="info-banner">
+              {duplicates.note ||
+                "These matches are informational. As admin, you can still publish after reviewing."}
+            </div>
           )}
         </div>
       </div>
+
+      {/* Match list */}
+      {matches.length > 0 && (
+        <div className="issue-list" style={{ marginTop: 24 }}>
+          {matches.map((match, index) => {
+            const signals = match.signal_scores || {};
+            const aiDecision = aiDecisionLabel(match.ai_review?.ai_duplicate_decision);
+            const aiConfidence = match.ai_review?.confidence;
+
+            return (
+              <div
+                className={`issue-row ${matchTypeTone(match.type)}`}
+                key={`${match.type}-${index}`}
+                style={{ display: "flex", flexDirection: "column", gap: 8, padding: "16px 0" }}
+              >
+                {/* Header row */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <strong style={{ fontSize: 17 }}>
+                    {match.uploaded_endpoint?.method} {match.uploaded_endpoint?.path}
+                  </strong>
+                  <span className={`badge ${matchTypeTone(match.type)}`}>
+                    {matchTypeLabel(match.type)}
+                  </span>
+                  {aiDecision && (
+                    <span className="badge neutral">
+                      AI: {aiDecision}
+                      {aiConfidence != null ? ` (${aiConfidence}%)` : ""}
+                    </span>
+                  )}
+                </div>
+
+                {/* Matched API info */}
+                <div style={{ fontSize: 14, color: "var(--text)" }}>
+                  Matched:{" "}
+                  <strong>
+                    {match.matched_endpoint?.method} {match.matched_endpoint?.path}
+                  </strong>
+                  {" in "}
+                  <strong>
+                    {match.matched_api?.title || match.matched_api?.filename || "Unknown API"}
+                  </strong>
+                  {match.matched_api?.version ? ` v${match.matched_api.version}` : ""}
+                </div>
+
+                {/* Score breakdown */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, fontSize: 13, color: "var(--muted)" }}>
+                  <span>Combined: <strong style={{ color: "var(--ink)" }}>{match.combined_score ?? "—"}%</strong></span>
+                  {signals.path_similarity != null && (
+                    <span>Path: <strong style={{ color: "var(--ink)" }}>{signals.path_similarity}%</strong></span>
+                  )}
+                  {signals.summary_similarity != null && (
+                    <span>Summary: <strong style={{ color: "var(--ink)" }}>{signals.summary_similarity}%</strong></span>
+                  )}
+                  {signals.tags_similarity != null && (
+                    <span>Tags: <strong style={{ color: "var(--ink)" }}>{signals.tags_similarity}%</strong></span>
+                  )}
+                  {match.method_match != null && (
+                    <span>Method: <strong style={{ color: match.method_match ? "var(--success)" : "var(--danger)" }}>
+                      {match.method_match ? "same" : "different"}
+                    </strong></span>
+                  )}
+                </div>
+
+                {/* AI reasoning */}
+                {match.ai_review?.reason && (
+                  <div style={{ fontSize: 13, color: "var(--text)", fontStyle: "italic" }}>
+                    "{match.ai_review.reason}"
+                  </div>
+                )}
+
+                {/* AI recommendation */}
+                {match.ai_review?.recommendation && (
+                  <div style={{ fontSize: 13, color: "var(--blue-dark)", fontWeight: 600 }}>
+                    → {match.ai_review.recommendation}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </SectionBlock>
   );
 }
 
-function PublicationGate({ onPublish, publishLoading, file, publishMessage, publishError, result, user }) {
+function PublicationGate({ onPublish, publishLoading, file, publishMessage, publishError, result, user, onReset }) {
   return (
     <SectionBlock
       title="Publication Gate"
-      subtitle="Final publication control for the governance catalog."
+      subtitle="Publish approved APIs to the governance catalog and WSO2 API Manager."
       meta={[result?.governance_decision || "N/A", result?.publishable ? "Publishable" : "Needs Fix"]}
     >
+      {/* WSO2 destination indicator */}
+      <div className="wso2-publish-target">
+        <img src="/images/wso2-logo.png" alt="WSO2" width="48" height="48" style={{ objectFit: "contain", flexShrink: 0 }} />
+        <div className="wso2-publish-target-body">
+          <strong>Publish destination: WSO2 API Manager</strong>
+          <p>
+            Clicking Publish will save this API to the local governance catalog <em>and</em> import it
+            into WSO2 API Manager (localhost:9443) where it will be available in the Developer Portal.
+          </p>
+        </div>
+      </div>
+
       <div className="publish-row">
         <div>
-          <h3>Publish to Governance Catalog</h3>
+          <h3>Publish to WSO2 API Manager</h3>
           <p>
-            Publish the API into the governance catalog only when the final result allows it.
+            Only APIs with a governance decision of <strong>ALLOW</strong> can be published.
           </p>
         </div>
 
         <button
           className="secondary-btn"
           onClick={onPublish}
-          disabled={publishLoading || !file || user?.role !== "admin"}
+          disabled={publishLoading || !file || result?.governance_decision !== "ALLOW"}
+          style={{ background: "var(--wso2)", boxShadow: "0 14px 30px rgba(255,120,0,0.22)" }}
         >
-          {publishLoading ? "Publishing..." : "Publish API"}
+          {publishLoading ? "Publishing…" : "Publish to WSO2"}
         </button>
       </div>
 
-      {user?.role !== "admin" ? (
-        <div className="info-banner">
-          Publishing is restricted to governance admins. Developers can analyze APIs and review
-          improvement actions, but cannot publish to the catalog.
+      {result?.governance_decision !== "ALLOW" ? (
+        <div className="info-banner">This API must reach an ALLOW decision before it can be published.</div>
+      ) : null}
+      {publishMessage && !publishError ? (
+        <div style={{ background: "var(--success-bg, #f0fdf4)", border: "1.5px solid var(--success-border, #bbf7d0)", borderRadius: 12, padding: "24px 28px", marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: "var(--success, #22c55e)", fontSize: 22, fontWeight: 700 }}>✓</span>
+            <p style={{ margin: 0, fontWeight: 600 }}>{publishMessage}</p>
+          </div>
+          {publishMessage.includes("ID: ") ? (
+            <a href="https://localhost:9443/devportal/apis" target="_blank" rel="noopener noreferrer" style={{ color: "var(--blue, #2563eb)", textDecoration: "underline" }}>
+              View in WSO2 Developer Portal →
+            </a>
+          ) : null}
+          <button className="ghost-btn" onClick={onReset}>Analyze another API</button>
         </div>
       ) : null}
-
-      {publishMessage ? <div className="success-banner">{publishMessage}</div> : null}
       {publishError ? <div className="error-banner">{publishError}</div> : null}
     </SectionBlock>
   );
@@ -875,7 +1080,15 @@ function FAQSection() {
     },
     {
       q: "Who can publish APIs?",
-      a: "Only users with the admin role can publish APIs to the governance catalog.",
+      a: "Any authenticated user can publish APIs that pass the governance gate.",
+    },
+    {
+      q: "What happens when an API is published?",
+      a: "The API is saved to the local governance catalog and simultaneously pushed to WSO2 API Manager via its Publisher REST API. It then appears in the WSO2 Developer Portal as a Published API. The WSO2 API ID is stored in the catalog for traceability.",
+    },
+    {
+      q: "What if the WSO2 push fails?",
+      a: "The local governance catalog entry is always saved first. If the WSO2 push fails, the API remains in the catalog marked as 'Local only' and the error reason is shown in the publish result. The admin can retry by re-publishing.",
     },
   ];
 
@@ -883,7 +1096,7 @@ function FAQSection() {
     <section className="faq-section scroll-reveal">
       <div className="editorial-head">
         <p className="eyebrow">FAQ</p>
-        <h2>Common governance questions</h2>
+        <h2>Frequently Asked Questions</h2>
         <p>Short explanations to help users understand the platform behavior.</p>
       </div>
 
@@ -899,6 +1112,24 @@ function FAQSection() {
   );
 }
 
+function AnalysisProgress() {
+  const messages = [
+    "Validating structure…",
+    "Running APRI scoring…",
+    "AI governance review in progress…",
+    "Checking for duplicate APIs…",
+    "Running prototype simulation…",
+  ];
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setIndex((i) => (i + 1) % messages.length), 2000);
+    return () => clearInterval(id);
+  }, []);
+
+  return <p className="analysis-progress-msg" style={{ textAlign: "center", color: "var(--muted)", fontSize: 14, marginTop: 10 }}>{messages[index]}</p>;
+}
+
 export default function AnalyzerPage({ token, user }) {
   const [file, setFile] = useState(null);
   const [result, setResult] = useState(null);
@@ -907,7 +1138,7 @@ export default function AnalyzerPage({ token, user }) {
   const [error, setError] = useState("");
   const [publishMessage, setPublishMessage] = useState("");
   const [publishError, setPublishError] = useState("");
-
+  const [isDragging, setIsDragging] = useState(false);
   const duplicateInfo = result?.duplicates;
   const broadReview = Array.isArray(result?.ai_review?.broad_review)
     ? result.ai_review.broad_review
@@ -917,9 +1148,6 @@ export default function AnalyzerPage({ token, user }) {
     if (!result) return "";
     if (result.status === "Rejected") {
       return "This specification has structural errors and cannot proceed to governance approval.";
-    }
-    if (duplicateInfo?.status === "blocked") {
-      return "This API is blocked by exact duplication against an existing catalog entry.";
     }
     if (result.status === "Needs Improvement") {
       return "The API is structurally valid, but governance issues still need to be resolved.";
@@ -969,6 +1197,13 @@ export default function AnalyzerPage({ token, user }) {
     }
   };
 
+  const handleReset = () => {
+    setFile(null);
+    setResult(null);
+    setPublishMessage("");
+    setPublishError("");
+  };
+
   const handlePublish = async () => {
     if (!file) {
       setPublishError("No file selected for publishing.");
@@ -1001,7 +1236,12 @@ export default function AnalyzerPage({ token, user }) {
         throw new Error(detail?.message || "Publishing was blocked.");
       }
 
-      setPublishMessage(data.message || "API published successfully.");
+      const wso2Msg = data.wso2?.success
+        ? ` Also pushed to WSO2 API Manager (ID: ${data.wso2.wso2_api_id}).`
+        : data.wso2?.error
+        ? ` Note: WSO2 push failed — ${data.wso2.error}`
+        : "";
+      setPublishMessage((data.message || "API published successfully.") + wso2Msg);
     } catch (err) {
       setPublishError(err.message || "Publishing failed.");
     } finally {
@@ -1029,25 +1269,44 @@ export default function AnalyzerPage({ token, user }) {
             <h3>Upload specification file</h3>
             <p>
               Accepted formats: <strong>.yaml</strong>, <strong>.yml</strong>,{" "}
-              <strong>.json</strong>
+              <strong>.json</strong> · Max 5 MB
             </p>
-            <span>{file ? `Selected: ${file.name}` : "No file selected yet"}</span>
           </div>
 
           <div className="upload-actions">
-            <input
-              className="file-input"
-              type="file"
-              accept=".yaml,.yml,.json"
-              onChange={(e) => setFile(e.target.files[0] || null)}
-            />
-            <button className="primary-btn" onClick={handleAnalyze} disabled={loading}>
-              {loading ? "Analyzing..." : "Analyze API"}
+            <label
+              className={`upload-trigger-label${file ? " has-file" : ""}${isDragging ? " drag-over" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const dropped = e.dataTransfer.files[0];
+                if (dropped && /\.(yaml|yml|json)$/i.test(dropped.name)) setFile(dropped);
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M16.88 9.94A5 5 0 1 0 9 4.06V4a1 1 0 1 0-2 0v.06A5 5 0 1 0 3.12 9.94 3.5 3.5 0 0 0 4 17h12a3.5 3.5 0 0 0 .88-6.88zM11 11v3a1 1 0 1 1-2 0v-3H7.41l2.29-2.29a1 1 0 0 1 1.42 0L13.6 11H11z"/>
+              </svg>
+              {file ? file.name : "Choose file…"}
+              <input
+                type="file"
+                accept=".yaml,.yml,.json"
+                onChange={(e) => setFile(e.target.files[0] || null)}
+              />
+            </label>
+            <button className="primary-btn" onClick={handleAnalyze} disabled={loading || !file}>
+              {loading ? "Analyzing…" : "Analyze API"}
             </button>
           </div>
         </div>
 
-        {loading ? <div className="loader-line" /> : null}
+        {loading ? (
+          <>
+            <div className="loader-line" />
+            <AnalysisProgress />
+          </>
+        ) : null}
         {error ? <div className="error-banner">{error}</div> : null}
       </section>
 
@@ -1071,11 +1330,14 @@ export default function AnalyzerPage({ token, user }) {
             structureIssues={result.structure_issues || []}
             bestPracticeIssues={result.best_practice_issues || []}
             duplicateInfo={duplicateInfo}
+            aiReview={result.ai_review?.broad_review || []}
           />
 
           <AutoImprovementPreview
             simulation={result.simulation}
             currentScore={result.apri_score}
+            file={file}
+            token={token}
           />
 
           <PrototypePipelineSimulation prototype={result.prototype_testing} />
@@ -1083,6 +1345,8 @@ export default function AnalyzerPage({ token, user }) {
           <ManualActionsRequired
             reviews={broadReview}
             simulation={result.simulation}
+            appliedChanges={result.simulation?.applied_changes || []}
+            bestPracticeIssues={result.best_practice_issues || []}
           />
 
           <DuplicateSection duplicates={duplicateInfo} />
@@ -1095,9 +1359,8 @@ export default function AnalyzerPage({ token, user }) {
             publishError={publishError}
             result={result}
             user={user}
+            onReset={handleReset}
           />
-
-          <FAQSection />
         </>
       ) : (
         <FAQSection />

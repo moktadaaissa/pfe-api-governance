@@ -3,13 +3,13 @@ def validate_best_practices(data: dict):
 
     valid_methods = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
     valid_path_level_fields = {"parameters", "summary", "description", "servers"}
-    discouraged_verbs = {"get", "create", "update", "delete", "set", "add", "remove", "approve", "reject", "block", "close", "activate", "deactivate"}
+    discouraged_verbs = {"get", "create", "update", "delete", "set", "add", "remove"}
 
     # Action-style POST endpoints (no requestBody required)
     action_post_segments = {
         "activate", "deactivate", "cancel", "approve", "reject",
         "suspend", "unsuspend", "lock", "unlock",
-        "reset-password", "resend", "verify"
+        "reset-password", "resend", "verify", "block", "close"
     }
 
     def add_issue(rule_id, message):
@@ -37,16 +37,36 @@ def validate_best_practices(data: dict):
             if part and not part.startswith("{")
         ]
 
+        last_segment = path.strip("/").split("/")[-1].lower() \
+                       if path.strip("/") else ""
+        last_segment_is_action = last_segment in action_post_segments
+
+        has_discouraged_verb = False
         for part in path_parts:
             clean_part = part.lower()
 
+            # Skip last segment if it is a known action endpoint
+            if clean_part == last_segment and last_segment_is_action:
+                continue
+
             for verb in discouraged_verbs:
-                if clean_part == verb or clean_part.startswith(verb):
-                    add_issue(
-                        "discouraged_verb_in_path",
-                        f"Path '{path}' should avoid verbs like '{part}' and prefer resource nouns"
-                    )
+                # Only flag camelCase verb prefixes (e.g. getUsers, createAccount)
+                # not resource names that happen to start with a verb (e.g. /sets, /blocks)
+                if clean_part == verb:
+                    has_discouraged_verb = True
                     break
+                if (clean_part.startswith(verb) and
+                        len(clean_part) > len(verb) and
+                        clean_part[len(verb)].isupper()):
+                    has_discouraged_verb = True
+                    break
+
+            if has_discouraged_verb:
+                add_issue(
+                    "discouraged_verb_in_path",
+                    f"Path '{path}' should avoid verbs like '{part}' and prefer resource nouns"
+                )
+                has_discouraged_verb = False
 
             if "_" in clean_part:
                 add_issue(

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56">
+  <!-- No background — sits on the blue gradient panel -->
+  <text
+    x="0" y="38"
+    font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+    font-size="40"
+    font-weight="900"
+    fill="white"
+    letter-spacing="-2"
+  >BIAT</text>
+  <text
+    x="3" y="53"
+    font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+    font-size="10.5"
+    font-weight="700"
+    fill="rgba(255,255,255,0.72)"
+    letter-spacing="1.6"
+  >INNOVATION &amp; TECHNOLOGY</text>
+</svg>

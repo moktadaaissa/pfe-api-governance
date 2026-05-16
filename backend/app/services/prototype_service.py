@@ -133,6 +133,10 @@ def _pipeline_status(prototype_status: str, has_structure_issues: bool) -> list[
     ]
 
 
+def method_upper(method: str) -> str:
+    return str(method).upper()
+
+
 def simulate_prototype_pipeline(
     data: dict,
     structure_issues: list | None = None,
@@ -391,7 +395,3 @@ def simulate_prototype_pipeline(
         "non_blocking": True,
         "related_best_practice_issues": len(best_practice_issues)
     }
-
-
-def method_upper(method: str) -> str:
-    return str(method).upper()

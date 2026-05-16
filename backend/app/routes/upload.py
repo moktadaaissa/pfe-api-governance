@@ -1,4 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi.responses import Response
+from copy import deepcopy
 import yaml
 import json
 
@@ -6,18 +8,28 @@ from app.services.validator import validate_openapi_structure
 from app.services.best_practices import validate_best_practices
 from app.services.scoring import compute_apri
 from app.services.ai_service import ai_review_openapi, ai_generate_safe_fixes
-from app.services.simulation_service import simulate_ai_improvement
+from app.services.simulation_service import simulate_ai_improvement, apply_safe_suggestions
 from app.services.duplicate_service import detect_duplicates
-from app.services.db_service import save_api_to_catalog, list_catalog_apis
+from app.services.db_service import (
+    save_api_to_catalog,
+    list_catalog_apis,
+    delete_api_from_catalog,
+    write_audit_log,
+)
+from app.services import wso2_service
 from app.services.prototype_service import simulate_prototype_pipeline
 from app.services.auth_service import get_current_user, require_admin
 
 router = APIRouter()
 
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+
 
 def _parse_uploaded_openapi(file: UploadFile, content: bytes):
     if not file.filename.endswith((".yaml", ".yml", ".json")):
         raise HTTPException(status_code=400, detail="File must be YAML or JSON")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds the 5 MB size limit")
 
     try:
         if file.filename.endswith((".yaml", ".yml")):
@@ -34,9 +46,12 @@ def _parse_uploaded_openapi(file: UploadFile, content: bytes):
 
 
 def _compute_duplicate_status(duplicate_matches: list) -> str:
-    if any(match.get("type") == "exact_duplicate" for match in duplicate_matches):
-        return "blocked"
-    if duplicate_matches:
+    """
+    All duplicate types — including exact_duplicate — are informational warnings only.
+    None of them block publication. The admin reviews and decides whether to proceed.
+    """
+    if any(match.get("type") in {"exact_duplicate", "strong_overlap", "potential_overlap"}
+           for match in duplicate_matches):
         return "warning"
     return "clean"
 
@@ -44,21 +59,35 @@ def _compute_duplicate_status(duplicate_matches: list) -> str:
 def _compute_governance_decision(
     structure_issues: list,
     apri_result: dict,
-    duplicate_status: str,
 ) -> str:
+    """
+    Governance decision is driven by structure validity and APRI quality only.
+    Duplicate detection results are purely informational and never affect this decision.
+    """
     if structure_issues:
-        return "BLOCK"
-    if duplicate_status == "blocked":
         return "BLOCK"
     if not apri_result.get("publishable", False):
         return "NEEDS_FIX"
     return "ALLOW"
 
 
+def _compute_status(structure_issues: list, best_practice_issues: list) -> str:
+    if structure_issues:
+        return "Rejected"
+    if best_practice_issues:
+        return "Needs Improvement"
+    return "Valid"
+
+
 @router.get("/catalog")
 async def get_catalog(current_user: dict = Depends(get_current_user)):
     return {
-        "apis": list_catalog_apis()
+        "viewer": {
+            "id": current_user["id"],
+            "username": current_user["username"],
+            "role": current_user["role"],
+        },
+        "apis": list_catalog_apis(),
     }
 
 
@@ -92,23 +121,20 @@ async def upload_openapi(
 
     duplicate_matches = detect_duplicates(data)
     duplicate_status = _compute_duplicate_status(duplicate_matches)
+    exact_duplicate_count = sum(
+        1 for m in duplicate_matches if m.get("type") == "exact_duplicate"
+    )
 
+    # Duplicates are never passed into governance decision
     governance_decision = _compute_governance_decision(
         structure_issues,
         apri_result,
-        duplicate_status
     )
 
-    if structure_issues:
-        status = "Rejected"
-    elif best_practice_issues:
-        status = "Needs Improvement"
-    else:
-        status = "Valid"
+    status = _compute_status(structure_issues, best_practice_issues)
 
     simulated_score = simulation_result.get("simulated_score")
     score_improvement = None
-
     if simulated_score is not None:
         score_improvement = round(simulated_score - apri_result["apri_score"], 2)
 
@@ -180,6 +206,11 @@ async def upload_openapi(
         "duplicates": {
             "status": duplicate_status,
             "count": len(duplicate_matches),
+            "exact_duplicate_count": exact_duplicate_count,
+            "note": (
+                "Duplicate detection is informational. "
+                "Admins can review these matches and decide whether to publish."
+            ),
             "matches": duplicate_matches,
         },
         "catalog_entry_id": None,
@@ -187,10 +218,41 @@ async def upload_openapi(
     }
 
 
+@router.post("/download-fixed")
+async def download_fixed(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    content = await file.read()
+    data = _parse_uploaded_openapi(file, content)
+
+    safe_fixes = ai_generate_safe_fixes(data)
+    if isinstance(safe_fixes, dict) and safe_fixes.get("error"):
+        safe_fixes = []
+    if not isinstance(safe_fixes, list):
+        safe_fixes = []
+
+    fixed_spec = deepcopy(data)
+    apply_safe_suggestions(fixed_spec, safe_fixes)
+
+    stem = file.filename.rsplit(".", 1)[0]
+    output_filename = f"{stem}_fixed.yaml"
+
+    yaml_bytes = yaml.dump(
+        fixed_spec, allow_unicode=True, sort_keys=False, default_flow_style=False
+    ).encode("utf-8")
+
+    return Response(
+        content=yaml_bytes,
+        media_type="application/x-yaml",
+        headers={"Content-Disposition": f'attachment; filename="{output_filename}"'},
+    )
+
+
 @router.post("/publish-openapi")
 async def publish_openapi(
     file: UploadFile = File(...),
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(get_current_user)
 ):
     content = await file.read()
     data = _parse_uploaded_openapi(file, content)
@@ -201,12 +263,17 @@ async def publish_openapi(
 
     duplicate_matches = detect_duplicates(data)
     duplicate_status = _compute_duplicate_status(duplicate_matches)
+    exact_duplicate_count = sum(
+        1 for m in duplicate_matches if m.get("type") == "exact_duplicate"
+    )
 
+    # Duplicates do NOT affect governance decision
     governance_decision = _compute_governance_decision(
         structure_issues,
         apri_result,
-        duplicate_status
     )
+
+    status = _compute_status(structure_issues, best_practice_issues)
 
     if governance_decision != "ALLOW":
         raise HTTPException(
@@ -219,6 +286,8 @@ async def publish_openapi(
                 "duplicates": {
                     "status": duplicate_status,
                     "count": len(duplicate_matches),
+                    "exact_duplicate_count": exact_duplicate_count,
+                    "note": "Duplicate warnings are informational and do not block publication.",
                     "matches": duplicate_matches,
                 },
                 "publishable": apri_result.get("publishable", False),
@@ -227,17 +296,67 @@ async def publish_openapi(
             },
         )
 
-    saved_api_id = save_api_to_catalog(data, file.filename)
+    wso2_result = wso2_service.publish(data, file.filename)
+
+    saved_api_id = save_api_to_catalog(
+        data=data,
+        filename=file.filename,
+        current_user=current_user,
+        apri_result=apri_result,
+        status=status,
+        governance_decision=governance_decision,
+        wso2_api_id=wso2_result.get("wso2_api_id"),
+    )
+
+    write_audit_log(
+        action="publish_api",
+        detail=f"Published API '{file.filename}' with APRI {apri_result.get('apri_score')}",
+        user_id=current_user["id"],
+        username=current_user["username"],
+    )
 
     return {
-        "message": "API published to governance catalog successfully.",
-        "published_by": current_user["username"],
-        "role": current_user["role"],
-        "decision": governance_decision,
+        "message": "API published successfully to governance catalog.",
         "catalog_entry_id": saved_api_id,
+        "published_by": {
+            "id": current_user["id"],
+            "username": current_user["username"],
+            "role": current_user["role"],
+        },
+        "status": status,
+        "governance_decision": governance_decision,
+        "apri_score": apri_result.get("apri_score"),
+        "grade": apri_result.get("grade"),
+        "wso2": wso2_result,
         "duplicates": {
             "status": duplicate_status,
             "count": len(duplicate_matches),
+            "exact_duplicate_count": exact_duplicate_count,
+            "note": "Duplicate warnings were present but did not block publication.",
             "matches": duplicate_matches,
         },
+    }
+
+
+@router.delete("/catalog/{api_id}")
+async def delete_catalog_api(
+    api_id: int,
+    current_user: dict = Depends(require_admin)
+):
+    deleted = delete_api_from_catalog(api_id)
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Catalog entry not found")
+
+    write_audit_log(
+        action="delete_api",
+        detail=f"Deleted catalog API id={api_id}",
+        user_id=current_user["id"],
+        username=current_user["username"],
+    )
+
+    return {
+        "message": "API removed from governance catalog.",
+        "deleted_api_id": api_id,
+        "deleted_by": current_user["username"],
     }
